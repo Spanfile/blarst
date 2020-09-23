@@ -84,16 +84,19 @@ async fn main() -> anyhow::Result<()> {
 }
 
 fn dns_datagram(buf: &mut [u8], rng: &mut ThreadRng) {
-    header(&mut buf[..12]);
+    header(&mut buf[..12], rng);
     question(&mut buf[12..], rng);
 }
 
-fn header(buf: &mut [u8]) {
-    let header: [u8; 12] = [0, 42, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0];
-    buf[..12].copy_from_slice(&header[..12]);
+fn header(buf: &mut [u8], rng: &mut ThreadRng) {
+    let id = Uniform::new(1u16, u16::MAX).sample(rng);
+    buf[0] = (id >> 8) as u8;
+    buf[1] = (id & 0xff) as u8;
+    buf[2..].copy_from_slice(&[1, 0, 0, 1, 0, 0, 0, 0, 0, 0]);
 }
 
 fn question(buf: &mut [u8], rng: &mut ThreadRng) {
+    // generate a question for <four random lowercase ascii characters>.com
     buf[0] = 4;
     let chars = Uniform::from(97..123);
     for i in 0..4 {
