@@ -23,12 +23,16 @@ struct Opts {
     /// Target a certain port
     #[structopt(short, long, default_value = "53")]
     port: u16,
-    /// Try and blast at a certain rate of queries per second. A value of 0 means to blast as fast as possible
+    /// Try and blast at a certain rate of queries per second. A value of 0 means to blast as fast as possible, which
+    /// in reality means trying to send a query once every nanosecond.
     #[structopt(short, long, default_value)]
     rate: u64,
     /// Blast out only this many queries. A value of 0 means sending out infinitely many queries
     #[structopt(short, long, default_value)]
     count: u64,
+    /// How many times a second to update the status display.
+    #[structopt(short, long, default_value = "10")]
+    update: u64,
 }
 
 #[tokio::main]
@@ -47,11 +51,10 @@ async fn main() -> anyhow::Result<()> {
     let mut last_read = 0u128;
     let mut last_update_time = Instant::now();
 
-    let blaster_rate = 100;
-    let update_rate = 10;
+    let blaster_rate = if opts.rate == 0 { 1_000_000_000 } else { opts.rate };
 
     let mut blaster_ticker = time::interval(Duration::from_nanos(1_000_000_000 / blaster_rate));
-    let mut update_ticker = time::interval(Duration::from_nanos(1_000_000_000 / update_rate));
+    let mut update_ticker = time::interval(Duration::from_nanos(1_000_000_000 / opts.update));
 
     loop {
         tokio::select! {
@@ -78,7 +81,9 @@ async fn main() -> anyhow::Result<()> {
                 last_read = read;
                 let read_rate = last_interval_read * (1_000_000_000 / elapsed);
 
-                print!("\r{} [{}/s] {} [{}/s]", sent, send_rate, read, read_rate);
+                let send_read_percentage = if sent == 0 { 1.0 } else { read as f64 / sent as f64 } * 100.0;
+
+                print!("\rr:{: >9} / s:{: >9} [{: >6.2}%] s:[{: >9}/s] r:[{: >9}/s]", read, sent, send_read_percentage, send_rate, read_rate);
                 io::stdout().flush().unwrap();
             }
         }
