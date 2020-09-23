@@ -1,3 +1,4 @@
+use circular_queue::CircularQueue;
 use io::Write;
 use rand::{
     distributions::Uniform,
@@ -7,7 +8,7 @@ use rand::{
 use std::{
     io,
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    time::{Duration, Instant},
+    time::Duration,
 };
 use structopt::StructOpt;
 use tokio::{net::UdpSocket, time};
@@ -47,12 +48,9 @@ async fn main() -> anyhow::Result<()> {
 
     let mut sent = 0u128;
     let mut read = 0u128;
-    let mut last_sent = 0u128;
-    let mut last_read = 0u128;
-    let mut last_update_time = Instant::now();
+    let mut send_queue = CircularQueue::with_capacity(opts.update as usize);
 
     let blaster_rate = if opts.rate == 0 { 1_000_000_000 } else { opts.rate };
-
     let mut blaster_ticker = time::interval(Duration::from_nanos(1_000_000_000 / blaster_rate));
     let mut update_ticker = time::interval(Duration::from_nanos(1_000_000_000 / opts.update));
 
@@ -70,20 +68,15 @@ async fn main() -> anyhow::Result<()> {
                 read += 1;
             }
             _ = update_ticker.tick() => {
-                let elapsed = last_update_time.elapsed().as_nanos();
-                last_update_time = Instant::now();
-
-                let last_interval_sent = sent - last_sent;
-                last_sent = sent;
-                let send_rate = last_interval_sent * (1_000_000_000 / elapsed);
-
-                let last_interval_read = read - last_read;
-                last_read = read;
-                let read_rate = last_interval_read * (1_000_000_000 / elapsed);
+                let send_rate = if let Some(oldest) = send_queue.push(sent) {
+                    sent - oldest
+                } else {
+                    sent - send_queue.asc_iter().next().unwrap()
+                };
+                let read_rate = 0;
 
                 let send_read_percentage = if sent == 0 { 1.0 } else { read as f64 / sent as f64 } * 100.0;
-
-                print!("\rr:{: >9} / s:{: >9} [{: >6.2}%] s:[{: >9}/s] r:[{: >9}/s]", read, sent, send_read_percentage, send_rate, read_rate);
+                print!("\rr/s: {: >9}/{: >9} [{: >6.2}%] s:[{: >7}/s] r:[{: >7}/s]", read, sent, send_read_percentage, send_rate, read_rate);
                 io::stdout().flush().unwrap();
             }
         }

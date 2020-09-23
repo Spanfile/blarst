@@ -37,6 +37,7 @@ name = "blarst"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "circular-queue",
  "rand",
  "structopt",
  "tokio",
@@ -53,6 +54,15 @@ name = "cfg-if"
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4785bdd1c96b2a846b2bd7cc02e86b6b3dbf14e7e53446c4f54c92a361040822"
+
+[[package]]
+name = "circular-queue"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d34327ead1c743a10db339de35fb58957564b99d248a67985c55638b22c59b5"
+dependencies = [
+ "version_check",
+]
 
 [[package]]
 name = "clap"
