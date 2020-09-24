@@ -34,12 +34,17 @@ struct Opts {
     /// How many times a second to update the status display.
     #[structopt(short, long, default_value = "10")]
     update: u64,
+    /// Print additional debugging information in the status display.
+    #[structopt(short, long)]
+    verbose: bool,
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let opts = Opts::from_args();
-    println!("{:?}", opts);
+    if opts.verbose {
+        println!("{:?}", opts);
+    }
 
     let socket = UdpSocket::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0)).await?;
     socket.connect((opts.target, opts.port)).await?;
@@ -48,7 +53,11 @@ async fn main() -> anyhow::Result<()> {
 
     let mut sent = 0u128;
     let mut read = 0u128;
+
+    // the size for the read and send tracking queues is the same as the display's update frequency, because it'll
+    // ensure the queues have datapoints up to a second away for easy rate calculation
     let mut send_queue = CircularQueue::with_capacity(opts.update as usize);
+    let mut read_queue = CircularQueue::with_capacity(opts.update as usize);
 
     let blaster_rate = if opts.rate == 0 { 1_000_000_000 } else { opts.rate };
     let mut blaster_ticker = time::interval(Duration::from_nanos(1_000_000_000 / blaster_rate));
@@ -73,10 +82,20 @@ async fn main() -> anyhow::Result<()> {
                 } else {
                     sent - send_queue.asc_iter().next().unwrap()
                 };
-                let read_rate = 0;
+
+                let read_rate = if let Some(oldest) = read_queue.push(read) {
+                    read - oldest
+                } else {
+                    read - read_queue.asc_iter().next().unwrap()
+                };
 
                 let send_read_percentage = if sent == 0 { 1.0 } else { read as f64 / sent as f64 } * 100.0;
                 print!("\rr/s: {: >9}/{: >9} [{: >6.2}%] s:[{: >7}/s] r:[{: >7}/s]", read, sent, send_read_percentage, send_rate, read_rate);
+
+                if opts.verbose {
+                    print!(" sq:{} rq:{}", send_queue.len(), read_queue.len());
+                }
+
                 io::stdout().flush().unwrap();
             }
         }
